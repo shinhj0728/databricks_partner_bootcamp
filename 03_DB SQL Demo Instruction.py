@@ -56,7 +56,7 @@
 # MAGIC 
 # MAGIC 
 # MAGIC   
-# MAGIC * 쿼리수행 - Chloropleth
+# MAGIC * 쿼리수행 - choropleth
 # MAGIC 
 # MAGIC ```
 # MAGIC SELECT COUNT(dbacademy.sales_gold.customer_id) AS cust_count,
@@ -70,7 +70,7 @@
 # MAGIC 
 # MAGIC 
 # MAGIC General:
-# MAGIC Visualization Type: Map (Chloropleth)
+# MAGIC Visualization Type: Map (Choropleth)
 # MAGIC Visualization Name: No. of Customers by State
 # MAGIC Map: USA
 # MAGIC Key Column: state
