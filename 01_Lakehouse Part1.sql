@@ -258,7 +258,7 @@ describe detail device_data_bronze_delta
 
 -- COMMAND ----------
 
--- MAGIC %fs ls /user/hive/warehouse/delta_odl_instructor_656843_db.db/device_data_bronze_delta/device_id=1/
+-- MAGIC %fs ls /user/hive/warehouse/PUT_DB_NAME.db/device_data_bronze_delta/device_id=1/
 
 -- COMMAND ----------
 
@@ -540,10 +540,6 @@ RESTORE TABLE user_data_bronze_delta TO VERSION AS OF 1;
 SELECT *
 FROM user_data_bronze_delta
 WHERE age = 25;
-
--- COMMAND ----------
-
-SELECT * FROM device_data_bronze_delta where num_steps > 7000 AND calories_burnt > 500
 
 -- COMMAND ----------
 

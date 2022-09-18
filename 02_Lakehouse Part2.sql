@@ -31,123 +31,8 @@
 
 -- MAGIC %python
 -- MAGIC databricks_user = spark.sql("SELECT current_user()").collect()[0][0].split('@')[0].replace(".", "_")
--- MAGIC print(databricks_user)
-
--- COMMAND ----------
-
--- MAGIC %python
--- MAGIC databricks_user = spark.sql("SELECT current_user()").collect()[0][0].split('@')[0].replace(".", "_")
 -- MAGIC spark.sql("USE delta_{}_db".format(str(databricks_user)))
 -- MAGIC print("데이터베이스명 : delta_{}_db".format((databricks_user)))
-
--- COMMAND ----------
-
--- MAGIC %md
--- MAGIC 
--- MAGIC # Streaming 시각화
--- MAGIC 
--- MAGIC 브론즈 테이블에 저장
--- MAGIC 원시 데이터는 대량 업로드 혹은 스트리밍 소스를 통해서 데이터 레이크에 수집되는 변경되지 않은 데이터 입니다.
--- MAGIC 다음의 함수는 카프카 서버에 덤프된 위키피디아 IRC 채널을 읽습니다. 카프카 서버는 일종의 "소방 호스" 역할을 하며 원시 데이터를 데이터 레이크에 덤프합니다.
--- MAGIC 
--- MAGIC 다음의 첫 단계는 스키마를 설정하는 것으로 추가 설명은 노트북 커멘트를 참고해주세요.
-
--- COMMAND ----------
-
--- MAGIC %python
--- MAGIC def untilStreamIsReady(name):
--- MAGIC   queries = list(filter(lambda query: query.name == name, spark.streams.active))
--- MAGIC 
--- MAGIC   if len(queries) == 0:
--- MAGIC     print("The stream is not active.")
--- MAGIC 
--- MAGIC   else:
--- MAGIC     while (queries[0].isActive and len(queries[0].recentProgress) == 0):
--- MAGIC       pass # wait until there is any type of progress
--- MAGIC 
--- MAGIC     if queries[0].isActive:
--- MAGIC       queries[0].awaitTermination(5)
--- MAGIC       print("The stream is active and ready.")
--- MAGIC     else:
--- MAGIC       print("The stream is not active.")
-
--- COMMAND ----------
-
--- MAGIC 
--- MAGIC %python
--- MAGIC 
--- MAGIC from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
--- MAGIC from pyspark.sql.functions import from_json, col
--- MAGIC 
--- MAGIC schema = StructType([
--- MAGIC   StructField("channel", StringType(), True),
--- MAGIC   StructField("comment", StringType(), True),
--- MAGIC   StructField("delta", IntegerType(), True),
--- MAGIC   StructField("flag", StringType(), True),
--- MAGIC   StructField("geocoding", StructType([                 # (OBJECT): Added by the server, field contains IP address geocoding information for anonymous edit.
--- MAGIC     StructField("city", StringType(), True),
--- MAGIC     StructField("country", StringType(), True),
--- MAGIC     StructField("countryCode2", StringType(), True),
--- MAGIC     StructField("countryCode3", StringType(), True),
--- MAGIC     StructField("stateProvince", StringType(), True),
--- MAGIC     StructField("latitude", DoubleType(), True),
--- MAGIC     StructField("longitude", DoubleType(), True),
--- MAGIC   ]), True),
--- MAGIC   StructField("isAnonymous", BooleanType(), True),      # (BOOLEAN): Whether or not the change was made by an anonymous user
--- MAGIC   StructField("isNewPage", BooleanType(), True),
--- MAGIC   StructField("isRobot", BooleanType(), True),
--- MAGIC   StructField("isUnpatrolled", BooleanType(), True),
--- MAGIC   StructField("namespace", StringType(), True),         # (STRING): Page's namespace. See https://en.wikipedia.org/wiki/Wikipedia:Namespace 
--- MAGIC   StructField("page", StringType(), True),              # (STRING): Printable name of the page that was edited
--- MAGIC   StructField("pageURL", StringType(), True),           # (STRING): URL of the page that was edited
--- MAGIC   StructField("timestamp", StringType(), True),         # (STRING): Time the edit occurred, in ISO-8601 format
--- MAGIC   StructField("url", StringType(), True),
--- MAGIC   StructField("user", StringType(), True),              # (STRING): User who made the edit or the IP address associated with the anonymous editor
--- MAGIC   StructField("userURL", StringType(), True),
--- MAGIC   StructField("wikipediaURL", StringType(), True),
--- MAGIC   StructField("wikipedia", StringType(), True),         # (STRING): Short name of the Wikipedia that was edited (e.g., "en" for the English)
--- MAGIC ])
--- MAGIC 
--- MAGIC # start our stream
--- MAGIC (spark.readStream
--- MAGIC   .format("kafka")  
--- MAGIC   .option("kafka.bootstrap.servers", "server1.databricks.training:9092")
--- MAGIC   .option("subscribe", "en")
--- MAGIC   .load()
--- MAGIC   .withColumn("json", from_json(col("value").cast("string"), schema))
--- MAGIC   .select(col("timestamp").alias("kafka_timestamp"), col("json.*"))
--- MAGIC   .writeStream
--- MAGIC   .format("delta")
--- MAGIC   .option("checkpointLocation", '/tmp/delta_rapid_start/{}/checkpoint/'.format(str(databricks_user)))
--- MAGIC   .outputMode("append")
--- MAGIC   .queryName("stream_1p")
--- MAGIC   .toTable('wikiIRC')
--- MAGIC )
-
--- COMMAND ----------
-
-SELECT * FROM wikiIRC  
-
--- COMMAND ----------
-
--- MAGIC %python
--- MAGIC untilStreamIsReady('stream_1p')
-
--- COMMAND ----------
-
-SELECT * FROM wikiIRC  
-
--- COMMAND ----------
-
-describe detail wikiIRC
-
--- COMMAND ----------
-
-describe detail wikiIRC
-
--- COMMAND ----------
-
-select count(*) from wikiIRC
 
 -- COMMAND ----------
 
@@ -243,6 +128,10 @@ USING DELTA
 
 -- COMMAND ----------
 
+SELECT * FROM user_daily_averages_gold
+
+-- COMMAND ----------
+
 -- MAGIC %md
 -- MAGIC # Schema Enforcement & Evolution
 -- MAGIC **Schema enforcement**, 스키마 유효성 검사라고도 하는 데이터 품질을 보장하기 위한 Delta Lake의 보호 장치입니다. Delta Lake는 쓰기 시 스키마 유효성 검사를 합니다. 즉 , 테이블에 대한 모든 신규 쓰기 시 대상 테이블의 스키마와 호환성이 확인됩니다. 스키마가 호환되지 않는 경우 Delta Lake는 트랜잭션을 완전히 취소하고(데이터가 기록되지 않음) 예외를 발생시켜 사용자에게 불일치에 대해서 알려줍니다.
@@ -250,7 +139,7 @@ USING DELTA
 -- MAGIC **Schema evolution** 시간이 지남에 따라 변화하는 데이터를 수용하기 위해 사용자가 테이블의 현재 스키마를 쉽게 변경 할 수 있는 기능입니다. 가장 일반적인 사례는 하나 이상의 새 컬럼을 포함하도록 스키마를 자동 조정하기 위해 추가 및 덮어쓰기 작업을 수행할 때 사용합니다.
 -- MAGIC 
 -- MAGIC ### Schema Enforcement
--- MAGIC 테이블에 쓰기에 적합한지 판단 시 Delta Lake는 다음의 규칙을 따름니다. 쓸 데이터프레임이 :
+-- MAGIC 테이블에 쓰기에 적합한지 판단 시 Delta Lake는 다음의 규칙을 따릅니다. 쓸 데이터프레임이 :
 -- MAGIC 
 -- MAGIC * 대상 테이블의 스키마에 없는 추가 열을 포함할 수 없습니다. 
 -- MAGIC * 대상 테이블의 컬럼 데이터 유형과 다른 컬럼 데이터 유형이 있을 수 없습니다.
@@ -259,13 +148,11 @@ USING DELTA
 -- COMMAND ----------
 
 -- DBTITLE 1,에러 발생 여부 확인
--- You can uncomment the next line to see the error (remove the -- at the beginning of the line)
- INSERT INTO TABLE user_data_bronze_delta VALUES ('this is a test')
+INSERT INTO TABLE user_data_bronze_delta VALUES ('this is a test')
 
 -- COMMAND ----------
 
--- You can uncomment the next line to see the error (remove the -- at the beginning of the line)
-INSERT INTO user_data_bronze_delta VALUES (39, 'M', 44, 65, 150, 'N','N','Normal','High',20, 'John Doe')
+INSERT INTO TABLE user_data_bronze_delta VALUES (39, 'M', 44, 65, 150, 'N','N','Normal','High',20, 'John Doe')
 
 -- COMMAND ----------
 
@@ -315,6 +202,106 @@ SELECT * FROM user_data_bronze_delta VERSION AS OF 0
 -- COMMAND ----------
 
 SET spark.databricks.delta.schema.autoMerge.enabled = false
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC 
+-- MAGIC # Streaming 시각화
+-- MAGIC 
+-- MAGIC 브론즈 테이블에 저장
+-- MAGIC 원시 데이터는 대량 업로드 혹은 스트리밍 소스를 통해서 데이터 레이크에 수집되는 변경되지 않은 데이터 입니다.
+-- MAGIC 다음의 함수는 카프카 서버에 덤프된 위키피디아 IRC 채널을 읽습니다. 카프카 서버는 일종의 "소방 호스" 역할을 하며 원시 데이터를 데이터 레이크에 덤프합니다.
+-- MAGIC 
+-- MAGIC 다음의 첫 단계는 스키마를 설정하는 것으로 추가 설명은 노트북 커멘트를 참고해주세요.
+
+-- COMMAND ----------
+
+-- MAGIC %python
+-- MAGIC def untilStreamIsReady(name):
+-- MAGIC   queries = list(filter(lambda query: query.name == name, spark.streams.active))
+-- MAGIC 
+-- MAGIC   if len(queries) == 0:
+-- MAGIC     print("The stream is not active.")
+-- MAGIC 
+-- MAGIC   else:
+-- MAGIC     while (queries[0].isActive and len(queries[0].recentProgress) == 0):
+-- MAGIC       pass # wait until there is any type of progress
+-- MAGIC 
+-- MAGIC     if queries[0].isActive:
+-- MAGIC       queries[0].awaitTermination(5)
+-- MAGIC       print("The stream is active and ready.")
+-- MAGIC     else:
+-- MAGIC       print("The stream is not active.")
+
+-- COMMAND ----------
+
+-- MAGIC %python
+-- MAGIC 
+-- MAGIC from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
+-- MAGIC from pyspark.sql.functions import from_json, col
+-- MAGIC 
+-- MAGIC schema = StructType([
+-- MAGIC   StructField("channel", StringType(), True),
+-- MAGIC   StructField("comment", StringType(), True),
+-- MAGIC   StructField("delta", IntegerType(), True),
+-- MAGIC   StructField("flag", StringType(), True),
+-- MAGIC   StructField("geocoding", StructType([                 # (OBJECT): Added by the server, field contains IP address geocoding information for anonymous edit.
+-- MAGIC     StructField("city", StringType(), True),
+-- MAGIC     StructField("country", StringType(), True),
+-- MAGIC     StructField("countryCode2", StringType(), True),
+-- MAGIC     StructField("countryCode3", StringType(), True),
+-- MAGIC     StructField("stateProvince", StringType(), True),
+-- MAGIC     StructField("latitude", DoubleType(), True),
+-- MAGIC     StructField("longitude", DoubleType(), True),
+-- MAGIC   ]), True),
+-- MAGIC   StructField("isAnonymous", BooleanType(), True),      # (BOOLEAN): Whether or not the change was made by an anonymous user
+-- MAGIC   StructField("isNewPage", BooleanType(), True),
+-- MAGIC   StructField("isRobot", BooleanType(), True),
+-- MAGIC   StructField("isUnpatrolled", BooleanType(), True),
+-- MAGIC   StructField("namespace", StringType(), True),         # (STRING): Page's namespace. See https://en.wikipedia.org/wiki/Wikipedia:Namespace 
+-- MAGIC   StructField("page", StringType(), True),              # (STRING): Printable name of the page that was edited
+-- MAGIC   StructField("pageURL", StringType(), True),           # (STRING): URL of the page that was edited
+-- MAGIC   StructField("timestamp", StringType(), True),         # (STRING): Time the edit occurred, in ISO-8601 format
+-- MAGIC   StructField("url", StringType(), True),
+-- MAGIC   StructField("user", StringType(), True),              # (STRING): User who made the edit or the IP address associated with the anonymous editor
+-- MAGIC   StructField("userURL", StringType(), True),
+-- MAGIC   StructField("wikipediaURL", StringType(), True),
+-- MAGIC   StructField("wikipedia", StringType(), True),         # (STRING): Short name of the Wikipedia that was edited (e.g., "en" for the English)
+-- MAGIC ])
+-- MAGIC 
+-- MAGIC # start our stream
+-- MAGIC (spark.readStream
+-- MAGIC   .format("kafka")  
+-- MAGIC   .option("kafka.bootstrap.servers", "server1.databricks.training:9092")
+-- MAGIC   .option("subscribe", "en")
+-- MAGIC   .load()
+-- MAGIC   .withColumn("json", from_json(col("value").cast("string"), schema))
+-- MAGIC   .select(col("timestamp").alias("kafka_timestamp"), col("json.*"))
+-- MAGIC   .writeStream
+-- MAGIC   .format("delta")
+-- MAGIC   .option("checkpointLocation", '/tmp/delta_rapid_start/{}/checkpoint/'.format(str(databricks_user)))
+-- MAGIC   .outputMode("append")
+-- MAGIC   .queryName("stream_1p")
+-- MAGIC   .toTable('wikiIRC')
+-- MAGIC )
+
+-- COMMAND ----------
+
+-- MAGIC %python
+-- MAGIC untilStreamIsReady('stream_1p')
+
+-- COMMAND ----------
+
+SELECT * FROM wikiIRC  
+
+-- COMMAND ----------
+
+describe detail wikiIRC
+
+-- COMMAND ----------
+
+select count(*) from wikiIRC
 
 -- COMMAND ----------
 
@@ -415,7 +402,7 @@ SELECT * FROM user_data_bronze_delta_clone_deep
 
 -- COMMAND ----------
 
--- DBTITLE 1,데모용 데이터베이스 삭제(Databricks SQL 이후 수행!)
+-- DBTITLE 1,데모용 데이터베이스 삭제
 -- MAGIC %python
 -- MAGIC spark.sql("DROP DATABASE IF EXISTS delta_{}_db CASCADE".format(str(databricks_user)))
 -- MAGIC dbutils.fs.rm('/tmp/delta_rapid_start/{}/'.format(str(databricks_user)), True)
