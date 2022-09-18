@@ -100,15 +100,15 @@ FROM
 -- header 파일이 있고(header true),  스키마 추론(inferSchema true)을 사용합니다.
 -- 임시 뷰를 생성한 이후 select 문을 수행해서 결과를 확인합니다.
 
-CREATE OR REPLACE TEMPORARY VIEW 뷰이름
-USING 파일종류
+CREATE OR REPLACE TEMPORARY VIEW userData
+USING csv
 OPTIONS(
-  path '경로',
-  header 사용여부,
-  inferSchema 사용여부 
+  path '/databricks-datasets/iot-stream/data-user/userData.csv',
+  header true,
+  inferSchema true 
 );
 
-SELECT * FROM 뷰이름;
+SELECT * FROM userData;
 
 -- COMMAND ----------
 
@@ -119,7 +119,10 @@ SELECT * FROM 뷰이름;
 
 -- COMMAND ----------
 
-SELECT * FROM JSON.`/databricks-datasets/iot-stream/data-device` 
+SELECT 
+  * 
+FROM 
+  JSON.`/databricks-datasets/iot-stream/data-device` 
 
 -- COMMAND ----------
 
@@ -201,7 +204,14 @@ SELECT * FROM user_data_raw_csv
   value STRING
 */
 CREATE TABLE IF NOT EXISTS device_data_raw_json(
---컬럼 내용 추가
+  calories_burnt DOUBLE,
+  device_id INT,
+  id STRING,
+  miles_walked DOUBLE,
+  num_steps INT,
+  `timestamp` TIMESTAMP,
+  user_id STRING,
+  value STRING
 )
 USING JSON
 OPTIONS (path "/databricks-datasets/iot-stream/data-device")
@@ -235,16 +245,20 @@ CTAS 방식(Create Table As Select)으로 델타테이블을 생성합니다.
 JSON 경로 : `/databricks-datasets/iot-stream/data-device`
 => SELECT * FROM JSON.`/databricks-datasets/iot-stream/data-device`
 */
-CREATE TABLE IF NOT EXISTS 델타테이블명
+CREATE TABLE IF NOT EXISTS device_data_bronze_delta
 USING DELTA
-PARTITIONED BY (파티션컬럼)
-AS SELECT * FROM JSON.`JSON경로`;
+PARTITIONED BY (device_id)
+AS SELECT * FROM JSON.`/databricks-datasets/iot-stream/data-device`;
 
-SELECT * FROM 델타테이블명;
+SELECT * FROM device_data_bronze_delta;
 
 -- COMMAND ----------
 
 describe detail device_data_bronze_delta
+
+-- COMMAND ----------
+
+-- MAGIC %fs ls /user/hive/warehouse/delta_odl_instructor_656843_db.db/device_data_bronze_delta/device_id=1/
 
 -- COMMAND ----------
 
@@ -370,9 +384,8 @@ SELECT * FROM user_data_bronze_delta WHERE age = 25
 -- userid = 21 정보를 user_data_bronze_delta 델타테이블에서 삭제합니다.
 -- 삭제 조건 where userid = 21;
 
-DELETE FROM 테이블명 where 삭제조건;
-
-SELECT * FROM 테이블명 WHERE age = 25
+DELETE FROM user_data_bronze_delta where userid = 21;
+SELECT * FROM user_data_bronze_delta WHERE age = 25
 
 -- COMMAND ----------
 
@@ -471,6 +484,7 @@ SELECT * FROM user_data_bronze_delta WHERE age = 34 OR age = 80;
 
 -- user_data_bronze_delta 테이블의 정보 확인
 -- Describe 사용
+describe history user_data_bronze_delta
 
 -- COMMAND ----------
 
